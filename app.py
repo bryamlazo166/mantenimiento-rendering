@@ -10,7 +10,7 @@ import json
 # ==========================================
 # 1. CONEXIÓN SEGURA (CLOUD & LOCAL)
 # ==========================================
-st.set_page_config(page_title=SAP PM Cloud - Rendering, layout=wide, page_icon=🏭)
+st.set_page_config(page_title="SAP PM Cloud - Rendering", layout="wide", page_icon="🏭")
 
 @st.cache_resource
 def get_google_sheet_client()
@@ -164,4 +164,5 @@ if client
             bajo_stock = df_rep[pd.to_numeric(df_rep['Stock']) = pd.to_numeric(df_rep['Min'])]
             st.dataframe(bajo_stock)
 else
+
     st.warning(Esperando conexión a Google Drive...)
