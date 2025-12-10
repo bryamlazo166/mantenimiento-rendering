@@ -31,7 +31,7 @@ def get_google_sheet_client()
         creds = ServiceAccountCredentials.from_json_keyfile_name(credentials.json, scope)
         return gspread.authorize(creds)
     except Exception as e
-        st.error(⚠️ No se detectaron credenciales. En la Nube configura los 'Secrets'. En local usa 'credentials.json'.)
+        st.error("⚠️ No se detectaron credenciales. En la Nube configura los 'Secrets'. En local usa 'credentials.json'.")
         return None
 
 def get_data(sheet_name)
@@ -166,3 +166,4 @@ if client
 else
 
     st.warning(Esperando conexión a Google Drive...)
+
