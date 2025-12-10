@@ -2,102 +2,174 @@ import streamlit as st
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-import time
 
 # ==========================================
-# 1. CONFIGURACIÓN E INICIO
+# 1. CONFIGURACIÓN DE LA PÁGINA
 # ==========================================
-st.set_page_config(page_title="SAP PM Relacional", layout="wide", page_icon="🏗️")
+st.set_page_config(page_title="Sistema Integral Rendering", layout="wide", page_icon="🏭")
 
-# Estilos CSS
+# CSS para mejorar la estética
 st.markdown("""
 <style>
-    .n2 { color: #b71c1c; font-weight: bold; font-size: 20px; border-bottom: 2px solid #b71c1c; margin-top: 15px;}
-    .n3 { color: #0d47a1; font-weight: bold; margin-left: 20px; font-size: 18px; }
-    .n4 { color: #1b5e20; font-weight: bold; margin-left: 40px; font-size: 16px; }
-    .spec-tag { background-color: #eee; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-left: 8px; font-family: monospace;}
+    .status-box { padding: 10px; border-radius: 5px; margin-bottom: 10px; font-weight: bold; }
+    .status-ok { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .status-err { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. CONEXIÓN A GOOGLE SHEETS
+# 2. CONEXIÓN SEGURA A GOOGLE DRIVE
 # ==========================================
 @st.cache_resource
 def get_client():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     
-    # Caso 1: Streamlit Cloud (Secrets)
+    # Intenta leer Secrets de la Nube (Streamlit Cloud)
     if "gcp_service_account" in st.secrets:
         creds_dict = {k:v for k,v in st.secrets["gcp_service_account"].items()}
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-    # Caso 2: Local (credentials.json)
+    # Intenta leer archivo local (para pruebas en tu PC)
     else:
         try:
             creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
         except:
-            st.error("❌ No se encontraron credenciales. Configura los Secrets en la nube o el archivo credentials.json local.")
             return None
-            
     return gspread.authorize(creds)
 
-def get_data(libro_nombre, hoja_nombre):
-    """Conecta y descarga datos. Muestra error si falla."""
+def get_data(archivo_nombre, hoja_nombre):
+    """
+    Busca el archivo y la hoja específica.
+    Devuelve DataFrame vacío si falla, para que la App no se caiga.
+    """
     client = get_client()
-    if not client: return pd.DataFrame()
+    if not client:
+        st.error("❌ Error de Credenciales. Configura los Secrets.")
+        return pd.DataFrame()
     
     try:
-        # Abre el libro por nombre exacto
-        sh = client.open(libro_nombre)
-        # Abre la pestaña
+        sh = client.open(archivo_nombre)
         ws = sh.worksheet(hoja_nombre)
-        # Descarga los registros
-        data = ws.get_all_records()
-        return pd.DataFrame(data)
+        return pd.DataFrame(ws.get_all_records())
     except gspread.SpreadsheetNotFound:
-        st.error(f"❌ ERROR CRÍTICO: No encuentro el archivo **'{libro_nombre}'** en Google Drive.")
-        st.info("💡 Solución: Asegúrate de que el nombre sea EXACTO y que hayas compartido el archivo con el email del robot (Service Account).")
+        st.sidebar.error(f"❌ No encuentro: {archivo_nombre}")
         return pd.DataFrame()
     except gspread.WorksheetNotFound:
-        st.warning(f"⚠️ El libro '{libro_nombre}' existe, pero no tiene una hoja llamada **'{hoja_nombre}'**.")
+        st.sidebar.warning(f"⚠️ En '{archivo_nombre}' falta la hoja: {hoja_nombre}")
         return pd.DataFrame()
     except Exception as e:
-        st.error(f"Error inesperado leyendo {libro_nombre}/{hoja_nombre}: {e}")
+        st.sidebar.error(f"Error en {archivo_nombre}: {e}")
         return pd.DataFrame()
 
 # ==========================================
-# 3. CARGA DE DATOS (LOS 3 ARCHIVOS)
+# 3. CARGA DE DATOS (NOMBRES CORREGIDOS)
 # ==========================================
-@st.cache_data(ttl=600) # Recarga cada 10 min
+@st.cache_data(ttl=300) # Recarga cada 5 min automáticamente
 def cargar_todo():
-    with st.spinner('📡 Conectando con la Base de Datos en Drive...'):
-        # --- LIBRO 1: DATA MAESTRA ---
+    with st.spinner('📡 Sincronizando con Google Drive...'):
+        
+        # --- ARCHIVO 1: 1_DATA_MAESTRA ---
+        # Asumo que las pestañas (hojas de abajo) se llaman: ACTIVOS, MATERIALES, BOM
         df_activos = get_data("1_DATA_MAESTRA", "ACTIVOS")
-        df_materiales = get_data("1_DATA_MAESTRA", "MATERIALES")
+        df_mat = get_data("1_DATA_MAESTRA", "MATERIALES")
         df_bom = get_data("1_DATA_MAESTRA", "BOM")
         
-        # --- LIBRO 2: GESTION TRABAJO ---
+        # --- ARCHIVO 2: 2_GESTION_TRABAJO ---
+        # Asumo pestañas: AVISOS, ORDENES
         df_avisos = get_data("2_GESTION_TRABAJO", "AVISOS")
         df_ots = get_data("2_GESTION_TRABAJO", "ORDENES")
         
-        # --- LIBRO 3: INDICADORES (NUEVO) ---
-        # Asegúrate que tu archivo se llame "3_INDICADORES" y la hoja "DATA" (o cambia el nombre aquí)
-        df_kpi = get_data("3_INDICADORES", "DATA") 
-        
-        # --- LIMPIEZA DE TIPOS ---
-        if not df_activos.empty:
-            df_activos['TAG'] = df_activos['TAG'].astype(str)
-            df_activos['TAG_Padre'] = df_activos['TAG_Padre'].astype(str)
-        
-        if not df_bom.empty:
-            df_bom['TAG_Equipo'] = df_bom['TAG_Equipo'].astype(str)
-            df_bom['SKU_Material'] = df_bom['SKU_Material'].astype(str)
+        # --- ARCHIVO 3: 3_MONITOREO ---
+        # Asumo pestaña: DATA (Si se llama "Hoja 1", cambia "DATA" por "Hoja 1" aquí abajo)
+        df_kpi = get_data("3_MONITOREO", "DATA") 
 
-        if not df_materiales.empty:
-            df_materiales['SKU'] = df_materiales['SKU'].astype(str)
+        # Correcciones de formato (Convertir TAGs y SKUs a texto siempre)
+        if not df_activos.empty and 'TAG' in df_activos.columns:
+            df_activos['TAG'] = df_activos['TAG'].astype(str)
+        if not df_mat.empty and 'SKU' in df_mat.columns:
+            df_mat['SKU'] = df_mat['SKU'].astype(str)
             
-        return df_activos, df_materiales, df_bom, df_avisos, df_ots, df_kpi
+        return df_activos, df_mat, df_bom, df_avisos, df_ots, df_kpi
 
 # Ejecutamos la carga
 df_activos, df_mat, df_bom, df_avisos, df_ots, df_kpi = cargar_todo()
 
 # ==========================================
+# 4. INTERFAZ DE USUARIO (DASHBOARD)
+# ==========================================
+st.sidebar.title("🏭 Planta Rendering")
+menu = st.sidebar.radio("Módulos:", 
+    ["1. Activos (Data Maestra)", "2. Gestión Mantenimiento", "3. Monitoreo (KPIs)", "4. Almacén"])
+
+st.sidebar.markdown("---")
+st.sidebar.caption("Estado de Conexión:")
+if not df_activos.empty: st.sidebar.markdown('<div class="status-ok">✅ Maestra OK</div>', unsafe_allow_html=True)
+if not df_avisos.empty: st.sidebar.markdown('<div class="status-ok">✅ Gestión OK</div>', unsafe_allow_html=True)
+if not df_kpi.empty: st.sidebar.markdown('<div class="status-ok">✅ Monitoreo OK</div>', unsafe_allow_html=True)
+else: st.sidebar.markdown('<div class="status-err">⚠️ Monitoreo Vacío</div>', unsafe_allow_html=True)
+
+# --- VISTA 1: ACTIVOS ---
+if menu == "1. Activos (Data Maestra)":
+    st.title("🏗️ Navegador de Activos")
+    if not df_activos.empty:
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            filtro = st.text_input("🔍 Buscar TAG o Nombre:")
+        
+        if filtro:
+            mask = df_activos.astype(str).apply(lambda x: filtro.lower() in x.str.lower().values, axis=1)
+            st.dataframe(df_activos[mask], use_container_width=True)
+        else:
+            st.dataframe(df_activos, use_container_width=True)
+    else:
+        st.warning("No se cargó '1_DATA_MAESTRA'. Revisa que la hoja interna se llame 'ACTIVOS'.")
+
+# --- VISTA 2: GESTIÓN ---
+elif menu == "2. Gestión Mantenimiento":
+    st.title("🛠️ Gestión del Trabajo")
+    tab_av, tab_ot = st.tabs(["📢 Avisos de Avería", "📋 Órdenes de Trabajo"])
+    
+    with tab_av:
+        if not df_avisos.empty:
+            st.dataframe(df_avisos, use_container_width=True)
+        else:
+            st.info("No hay datos en 'AVISOS' o no se pudo leer el archivo.")
+            
+    with tab_ot:
+        if not df_ots.empty:
+            st.dataframe(df_ots, use_container_width=True)
+        else:
+            st.info("No hay datos en 'ORDENES'.")
+
+# --- VISTA 3: MONITOREO ---
+elif menu == "3. Monitoreo (KPIs)":
+    st.title("📈 Dashboard de Monitoreo")
+    st.markdown("Datos provenientes de: `3_MONITOREO`")
+    
+    if not df_kpi.empty:
+        st.dataframe(df_kpi, use_container_width=True)
+        
+        # Detección automática de columnas numéricas para graficar
+        cols_num = df_kpi.select_dtypes(include=['float64', 'int64']).columns
+        if len(cols_num) > 0:
+            st.subheader("Tendencias")
+            kpi_selec = st.multiselect("Selecciona variables a graficar:", cols_num, default=cols_num[0])
+            if kpi_selec:
+                st.line_chart(df_kpi[kpi_selec])
+        else:
+            st.info("La tabla no tiene columnas numéricas para graficar.")
+    else:
+        st.error("El archivo `3_MONITOREO` se encontró, pero la pestaña 'DATA' está vacía o no existe.")
+        st.markdown("**Solución:** Abre tu Excel `3_MONITOREO` y asegúrate de que la pestaña inferior se llame **DATA**.")
+
+# --- VISTA 4: ALMACÉN ---
+elif menu == "4. Almacén":
+    st.title("📦 Inventario de Repuestos")
+    if not df_mat.empty:
+        busq = st.text_input("Buscar SKU o Repuesto:")
+        if busq:
+             mask = df_mat.astype(str).apply(lambda x: busq.lower() in x.str.lower().values, axis=1)
+             st.dataframe(df_mat[mask], use_container_width=True)
+        else:
+            st.dataframe(df_mat, use_container_width=True)
+    else:
+        st.warning("No se cargó la hoja 'MATERIALES' del archivo 1.")
