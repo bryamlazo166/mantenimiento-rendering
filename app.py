@@ -10,7 +10,7 @@ import time
 # ==========================================
 st.set_page_config(page_title="SAP PM Cloud - ISO 14224", layout="wide", page_icon="🏭")
 
-# Estilos visuales
+# Estilos visuales mejorados
 st.markdown("""
 <style>
     .n2 { color: #b71c1c; font-size: 20px; font-weight: bold; border-bottom: 2px solid #b71c1c; margin-top: 15px; }
@@ -18,14 +18,14 @@ st.markdown("""
     .n4 { color: #1b5e20; font-size: 16px; font-weight: bold; margin-left: 40px; }
     .n5 { color: #e65100; font-size: 15px; margin-left: 60px; font-style: italic; }
     .n6 { color: #424242; font-size: 14px; margin-left: 80px; border-left: 2px solid #ddd; padding-left: 5px; }
-    /* Resaltar selectores */
-    .stSelectbox label { font-weight: bold; color: #333; }
+    .existing-box { background-color: #e3f2fd; padding: 10px; border-radius: 5px; border-left: 5px solid #2196f3; margin-bottom: 10px; }
 </style>
 """, unsafe_allow_html=True)
 
 @st.cache_resource
 def get_google_sheet_client():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    # 1. Intentar Secrets (Nube)
     if "gcp_service_account" in st.secrets:
         try:
             secrets = st.secrets["gcp_service_account"]
@@ -35,6 +35,7 @@ def get_google_sheet_client():
         except Exception as e:
             st.error(f"Error Secrets: {e}")
             return None
+    # 2. Intentar Local (JSON)
     try:
         creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
         return gspread.authorize(creds)
@@ -55,7 +56,7 @@ def get_data(sheet_name):
         return pd.DataFrame()
 
 # ==========================================
-# 2. CRUD
+# 2. FUNCIONES CRUD
 # ==========================================
 def guardar_activo(datos):
     client = get_google_sheet_client()
@@ -67,7 +68,8 @@ def guardar_activo(datos):
         ws.append_row(["ID", "Nivel", "TAG_Padre", "TAG", "Nombre", "Area", "Criticidad", "Estado"])
     
     nuevo_id = int(time.time())
-    fila = [nuevo_id, datos['Nivel'], datos['TAG_Padre'], datos['TAG'], datos['Nombre'], datos['Area'], datos['Criticidad'], "Operativo"]
+    # Aseguramos guardar como string para evitar errores de formato
+    fila = [nuevo_id, datos['Nivel'], datos['TAG_Padre'], str(datos['TAG']), datos['Nombre'], datos['Area'], datos['Criticidad'], "Operativo"]
     ws.append_row(fila)
 
 def modificar_activo(tag, campo, valor):
@@ -88,16 +90,16 @@ def modificar_activo(tag, campo, valor):
 # ==========================================
 
 def render_gestion_activos():
-    st.header("🏭 Gestión de Activos (Cascada ISO 14224)")
+    st.header("🏭 Gestión de Activos (ISO 14224)")
     df = get_data("Equipos")
     if df.empty:
         df = pd.DataFrame(columns=["ID", "Nivel", "TAG_Padre", "TAG", "Nombre", "Area", "Criticidad", "Estado"])
 
-    tab1, tab2, tab3 = st.tabs(["🌳 Árbol", "➕ Crear (Cascada)", "✏️ Editar"])
+    tab1, tab2, tab3 = st.tabs(["🌳 Árbol Visual", "➕ Crear (Cascada)", "✏️ Editar Rapido"])
 
     # --- TAB 1: ÁRBOL VISUAL ---
     with tab1:
-        st.info("Visualización jerárquica de la planta.")
+        st.info("Estructura actual de la planta.")
         plantas = df[df['Nivel'] == 'L2-Planta']
         for _, p in plantas.iterrows():
             st.markdown(f"<div class='n2'>🏢 {p['Nombre']} ({p['TAG']})</div>", unsafe_allow_html=True)
@@ -114,30 +116,30 @@ def render_gestion_activos():
                             for _, c in componentes.iterrows():
                                 st.markdown(f"<div class='n6'>• 🔩 {c['Nombre']}</div>", unsafe_allow_html=True)
 
-    # --- TAB 2: CREAR CON FILTROS EN CASCADA ---
+    # --- TAB 2: CREAR CON VISUALIZACIÓN DE EXISTENTES ---
     with tab2:
-        st.subheader("Alta de Activo por Pasos")
+        st.subheader("Alta de Activo Asistida")
         
-        # 1. ¿Qué quieres crear?
+        # 1. Selección de Nivel
         niveles_map = {
             "L2-Planta": 1, "L3-Area": 2, "L4-Equipo": 3, "L5-Sistema": 4, "L6-Componente": 5
         }
         target_level = st.selectbox("1. ¿Qué nivel deseas crear?", list(niveles_map.keys()))
         
         padre_seleccionado_tag = ""
+        nombre_padre_display = "Raíz"
         area_heredada = "General"
         
-        # LOGICA DE CASCADA
+        # --- LÓGICA DE CASCADA PARA ENCONTRAR AL PADRE ---
         if target_level == "L2-Planta":
             padre_seleccionado_tag = "CORP"
             st.success("Creando una nueva Planta raíz.")
         
         else:
-            st.write("---")
-            st.write("⬇️ **Selecciona la ubicación exacta:**")
+            st.markdown("⬇️ **Navega hasta la ubicación correcta:**")
             col_sel1, col_sel2 = st.columns(2)
             
-            # PASO A: Seleccionar PLANTA (Siempre necesario si no es L2)
+            # PASO A: Seleccionar PLANTA
             plantas = df[df['Nivel'] == 'L2-Planta']
             if plantas.empty:
                 st.error("Primero crea una Planta (L2).")
@@ -146,29 +148,27 @@ def render_gestion_activos():
             planta_sel = col_sel1.selectbox("🏢 Planta / Empresa:", plantas['TAG'] + " | " + plantas['Nombre'])
             tag_planta = planta_sel.split(" | ")[0]
             
-            # Si quiere crear Area (L3), su padre es la Planta
             if target_level == "L3-Area":
                 padre_seleccionado_tag = tag_planta
-                
-            # Si quiere crear L4, L5 o L6, necesitamos bajar más niveles
+                nombre_padre_display = planta_sel.split(" | ")[1]
+
+            # PASO B: Filtrar Áreas
             if niveles_map[target_level] > 2:
-                # PASO B: Filtrar Áreas de esa Planta
                 areas = df[(df['Nivel'] == 'L3-Area') & (df['TAG_Padre'] == tag_planta)]
                 if areas.empty:
-                    st.warning(f"La planta {tag_planta} no tiene Áreas. Crea una Área primero.")
+                    st.warning(f"La planta {tag_planta} no tiene Áreas.")
                     st.stop()
                     
                 area_sel = col_sel2.selectbox("📍 Área:", areas['TAG'] + " | " + areas['Nombre'])
                 tag_area = area_sel.split(" | ")[0]
-                area_heredada = areas[areas['TAG'] == tag_area].iloc[0]['Nombre'] # Heredamos nombre para campo Area
+                area_heredada = areas[areas['TAG'] == tag_area].iloc[0]['Nombre']
                 
-                # Si quiere crear Equipo (L4), su padre es el Área
                 if target_level == "L4-Equipo":
                     padre_seleccionado_tag = tag_area
+                    nombre_padre_display = area_sel.split(" | ")[1]
                 
-                # Si quiere L5 o L6, bajamos más
+                # PASO C: Filtrar Equipos
                 if niveles_map[target_level] > 3:
-                    # PASO C: Filtrar Equipos de esa Área
                     col_sel3, col_sel4 = st.columns(2)
                     equipos = df[(df['Nivel'] == 'L4-Equipo') & (df['TAG_Padre'] == tag_area)]
                     if equipos.empty:
@@ -180,10 +180,10 @@ def render_gestion_activos():
                     
                     if target_level == "L5-Sistema":
                         padre_seleccionado_tag = tag_equipo
-                        
-                    # Si quiere L6, bajamos al último nivel
+                        nombre_padre_display = equipo_sel.split(" | ")[1]
+
+                    # PASO D: Filtrar Sistemas
                     if niveles_map[target_level] > 4:
-                        # PASO D: Filtrar Sistemas de ese Equipo
                         sistemas = df[(df['Nivel'] == 'L5-Sistema') & (df['TAG_Padre'] == tag_equipo)]
                         if sistemas.empty:
                             st.warning(f"El equipo {tag_equipo} no tiene Sistemas.")
@@ -194,40 +194,53 @@ def render_gestion_activos():
                         
                         if target_level == "L6-Componente":
                             padre_seleccionado_tag = tag_sistema
+                            nombre_padre_display = sistema_sel.split(" | ")[1]
+
+        # --- AQUÍ ESTÁ LA ACTUALIZACIÓN: VISUALIZAR HERMANOS ---
+        st.markdown("---")
+        st.markdown(f"### 👁️ Elementos ya existentes en: *{nombre_padre_display}*")
+        
+        # Filtramos los items que ya existen bajo este mismo padre y mismo nivel
+        # Para ver qué TAGs ya están ocupados
+        hermanos = df[(df['Nivel'] == target_level) & (df['TAG_Padre'] == padre_seleccionado_tag)]
+        
+        if not hermanos.empty:
+            st.info(f"Se encontraron {len(hermanos)} items creados. Revisa la lista para no repetir TAGs.")
+            # Mostramos tabla limpia
+            st.dataframe(
+                hermanos[['TAG', 'Nombre', 'Criticidad', 'Estado']], 
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.success("✨ No hay items creados en este nivel todavía. ¡Puedes empezar la serie!")
 
         # FORMULARIO FINAL
         st.markdown("---")
-        st.info(f"Asignando **{target_level}** al padre: `{padre_seleccionado_tag}`")
-        
         with st.form("alta_final"):
+            st.markdown(f"**Creando Nuevo: {target_level}**")
             c1, c2, c3 = st.columns(3)
-            tag_new = c1.text_input("TAG Nuevo", placeholder="Ej. 001").upper()
+            tag_new = c1.text_input("TAG Nuevo (Recomendado seguir secuencia)", placeholder="Ej. 001").upper()
             nom_new = c2.text_input("Nombre Técnico")
             crit = c3.select_slider("Criticidad", ["C", "B", "A"], value="B")
             
-            if st.form_submit_button("💾 Guardar"):
+            if st.form_submit_button("💾 Crear Activo"):
                 if tag_new and nom_new:
-                    # Construir TAG completo sugerido o usar el manual
-                    full_tag = tag_new 
-                    
-                    exists = False
-                    if not df.empty:
-                        if full_tag in df['TAG'].values: exists = True
-                    
-                    if exists:
-                        st.error("TAG Duplicado.")
+                    # Validar Duplicado Global
+                    if not df.empty and tag_new in df['TAG'].values:
+                        st.error(f"❌ Error: El TAG '{tag_new}' ya existe en la base de datos.")
                     else:
                         d = {
                             "Nivel": target_level, "TAG_Padre": padre_seleccionado_tag,
-                            "TAG": full_tag, "Nombre": nom_new, 
+                            "TAG": tag_new, "Nombre": nom_new, 
                             "Area": area_heredada, "Criticidad": crit
                         }
                         guardar_activo(d)
-                        st.success("Creado!")
+                        st.success(f"✅ {nom_new} creado correctamente!")
                         time.sleep(1)
                         st.rerun()
                 else:
-                    st.warning("Datos incompletos.")
+                    st.warning("⚠️ Debes completar TAG y Nombre.")
 
     # --- TAB 3: EDITAR ---
     with tab3:
