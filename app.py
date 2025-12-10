@@ -5,261 +5,189 @@ import plotly.express as px
 from datetime import datetime
 
 # ==========================================
-# 1. CONFIGURACIÓN Y ESTADO (BASE DE DATOS EN MEMORIA)
+# 1. CONFIGURACIÓN Y ESTRUCTURA DE DATOS
 # ==========================================
 st.set_page_config(page_title="Sistema Integral Rendering", layout="wide", page_icon="🏭")
 
-# Inicializamos las tablas en memoria si no existen
+# Inicialización de la Base de Datos en Memoria
 if 'df_activos' not in st.session_state:
-    # Estructura base (Columnas de tus archivos reales)
-    st.session_state.df_activos = pd.DataFrame(columns=["TAG", "Nombre", "Nivel", "TAG_Padre", "Area", "Estado", "Especificaciones"])
-    st.session_state.df_mat = pd.DataFrame(columns=["SKU", "Descripcion", "Marca", "Stock", "Ubicacion"])
-    st.session_state.df_bom = pd.DataFrame(columns=["TAG_Equipo", "SKU_Material", "Cantidad"])
-    st.session_state.df_avisos = pd.DataFrame(columns=["ID", "Fecha", "TAG_Equipo", "Descripcion", "Estado"])
-    st.session_state.df_ots = pd.DataFrame(columns=["ID_OT", "ID_Aviso", "TAG_Equipo", "Trabajo", "Fecha_Prog", "Estado"])
-    st.session_state.df_lecturas = pd.DataFrame(columns=["Fecha", "TAG_Equipo", "Variable", "Valor", "Inspector"])
+    # Definimos columnas base
+    st.session_state.df_activos = pd.DataFrame(columns=[
+        "TAG", "Nombre", "Nivel", "TAG_Padre", "Area", "Estado", "Especificaciones"
+    ])
+    st.session_state.df_ots = pd.DataFrame(columns=["ID", "TAG_Equipo", "Descripcion", "Estado", "Fecha"])
+    st.session_state.df_lecturas = pd.DataFrame(columns=["Fecha", "TAG", "Variable", "Valor", "Inspector"])
 
-    # --- PRE-CARGA DE EJEMPLO (Tus 9 Digestores) ---
-    # Solo se carga la primera vez para que no empieces desde cero
-    activos_demo = [
-        {"TAG": "PL-REND", "Nombre": "Planta Rendering", "Nivel": "L2-Planta", "TAG_Padre": "ROOT", "Area": "General"},
-        {"TAG": "AR-COCC", "Nombre": "Área Cocción", "Nivel": "L3-Area", "TAG_Padre": "PL-REND", "Area": "Cocción"},
-    ]
-    for i in range(1, 10):
-        tag = f"EQ-DIG-{i:02d}"
-        activos_demo.append({"TAG": tag, "Nombre": f"Digestor #{i}", "Nivel": "L4-Equipo", "TAG_Padre": "AR-COCC", "Area": "Cocción"})
-        activos_demo.append({"TAG": f"{tag}-TRM", "Nombre": f"Transmisión Dig.{i}", "Nivel": "L5-Componente", "TAG_Padre": tag, "Area": "Cocción"})
-        
-    st.session_state.df_activos = pd.DataFrame(activos_demo)
-
-# Atajos para escribir menos
-def get_df(key): return st.session_state[key]
-def save_df(key, df): st.session_state[key] = df
-
-# ==========================================
-# 2. FUNCIONES DE FILTRO EN CASCADA
-# ==========================================
-def cascada_activos(key_suffix=""):
-    """Genera selectores Planta -> Área -> Equipo y devuelve la selección final"""
-    df = get_df('df_activos')
+    # --- GENERADOR DE DATA DEMO (9 DIGESTORES CON SISTEMAS) ---
+    data_demo = []
     
-    col1, col2, col3 = st.columns(3)
+    # Nivel 2 y 3
+    data_demo.append({"TAG": "PL-REND", "Nombre": "Planta Rendering", "Nivel": "L2-Planta", "TAG_Padre": "ROOT", "Area": "General"})
+    data_demo.append({"TAG": "AR-COCC", "Nombre": "Área de Cocción", "Nivel": "L3-Area", "TAG_Padre": "PL-REND", "Area": "Cocción"})
+    
+    # Bucle para los 9 Digestores
+    for i in range(1, 10):
+        dig_num = f"{i:02d}"
+        tag_dig = f"EQ-DIG-{dig_num}"
+        
+        # L4 - EQUIPO
+        data_demo.append({"TAG": tag_dig, "Nombre": f"Digestor #{i}", "Nivel": "L4-Equipo", "TAG_Padre": "AR-COCC", "Area": "Cocción", "Especificaciones": "5 Ton/h"})
+        
+        # --- L5 - SISTEMAS DEL DIGESTOR ---
+        tag_sis_mot = f"{tag_dig}-SIS-MOT"
+        tag_sis_trm = f"{tag_dig}-SIS-TRM"
+        
+        data_demo.append({"TAG": tag_sis_mot, "Nombre": "Sistema Motriz", "Nivel": "L5-Sistema", "TAG_Padre": tag_dig, "Area": "Cocción", "Especificaciones": "Alimentación eléctrica"})
+        data_demo.append({"TAG": tag_sis_trm, "Nombre": "Sistema de Transmisión", "Nivel": "L5-Sistema", "TAG_Padre": tag_dig, "Area": "Cocción", "Especificaciones": "Mecánico"})
+        
+        # --- L6 - COMPONENTES (HIJOS DE LOS SISTEMAS) ---
+        # Componentes del Sistema Motriz
+        data_demo.append({"TAG": f"{tag_dig}-MTR", "Nombre": "Motor Eléctrico 75HP", "Nivel": "L6-Componente", "TAG_Padre": tag_sis_mot, "Area": "Cocción", "Especificaciones": "440V, 1800RPM"})
+        
+        # Componentes del Sistema de Transmisión
+        data_demo.append({"TAG": f"{tag_dig}-FAJ", "Nombre": "Juego de Fajas B86", "Nivel": "L6-Componente", "TAG_Padre": tag_sis_trm, "Area": "Cocción", "Especificaciones": "Perfil B, L=86"})
+        data_demo.append({"TAG": f"{tag_dig}-POL", "Nombre": "Polea Motriz 4 Canales", "Nivel": "L6-Componente", "TAG_Padre": tag_sis_trm, "Area": "Cocción", "Especificaciones": "Hierro Fundido"})
+
+    st.session_state.df_activos = pd.DataFrame(data_demo)
+
+# Atajos
+def get_db(): return st.session_state.df_activos
+def save_db(df): st.session_state.df_activos = df
+
+# ==========================================
+# 2. LÓGICA DE FILTROS EN CASCADA (5 NIVELES)
+# ==========================================
+def filtro_cascada_5_niveles(key_suffix):
+    """
+    Genera selectores dependientes: Planta > Área > Equipo > Sistema
+    Devuelve la selección de cada nivel.
+    """
+    df = get_db()
+    
+    col1, col2, col3, col4 = st.columns(4)
     
     # 1. Planta
     plantas = df[df['Nivel'] == 'L2-Planta']['TAG'].unique()
-    planta = col1.selectbox("📍 Planta", plantas, key=f"pl_{key_suffix}")
+    sel_planta = col1.selectbox("📍 Planta", plantas, key=f"p_{key_suffix}")
     
-    # 2. Área (Filtrada)
-    areas = df[df['TAG_Padre'] == planta]['TAG'].unique() if planta else []
-    area = col2.selectbox("🏭 Área", areas, key=f"ar_{key_suffix}")
+    # 2. Área
+    areas = df[df['TAG_Padre'] == sel_planta]['TAG'].unique() if sel_planta else []
+    sel_area = col2.selectbox("🏭 Área", areas, key=f"a_{key_suffix}")
     
-    # 3. Equipo (Filtrado)
-    equipos = df[df['TAG_Padre'] == area]['TAG'].unique() if area else []
-    equipo = col3.selectbox("⚙️ Equipo", equipos, key=f"eq_{key_suffix}")
+    # 3. Equipo
+    equipos = df[df['TAG_Padre'] == sel_area]['TAG'].unique() if sel_area else []
+    sel_equipo = col3.selectbox("⚙️ Equipo", equipos, key=f"e_{key_suffix}")
     
-    return planta, area, equipo
+    # 4. Sistema (NUEVO NIVEL)
+    sistemas = df[df['TAG_Padre'] == sel_equipo]['TAG'].unique() if sel_equipo else []
+    sel_sistema = col4.selectbox("🔄 Sistema", sistemas, key=f"s_{key_suffix}")
+    
+    return sel_planta, sel_area, sel_equipo, sel_sistema
 
 # ==========================================
 # 3. INTERFAZ PRINCIPAL
 # ==========================================
-st.title("🏭 Gestión de Activos y Mantenimiento")
-st.markdown("Sistema CRUD: Crear, Leer, Actualizar y Borrar datos en tiempo real.")
+st.title("🏭 Gestión Integral de Activos ISO-14224")
+st.markdown("**Estructura:** Planta > Área > Equipo > Sistema > Componente")
 
-menu = st.sidebar.radio("Módulos Operativos:", 
-    ["1. Maestro de Activos (Árbol)", 
-     "2. Gestión del Trabajo (OTs)", 
-     "3. Monitoreo (Lecturas)", 
-     "4. Almacén & BOM"])
+tab_arbol, tab_nuevo, tab_datos = st.tabs(["🌳 Árbol Jerárquico", "➕ Agregar Activo", "📝 Editar Datos Manualmente"])
 
-# -----------------------------------------------------------------------------
-# MÓDULO 1: MAESTRO DE ACTIVOS (ALTA Y EDICIÓN)
-# -----------------------------------------------------------------------------
-if menu == "1. Maestro de Activos (Árbol)":
-    tab_ver, tab_crear, tab_edit = st.tabs(["👁️ Explorador Jerárquico", "➕ Agregar Nuevo Activo", "✏️ Edición Masiva"])
+# --- TAB 1: VISUALIZADOR DE ÁRBOL ---
+with tab_arbol:
+    st.subheader("Explorador de Activos")
+    st.info("Selecciona los filtros para navegar hasta el componente.")
     
-    # --- TAB: VER ---
-    with tab_ver:
-        st.subheader("Navegación en Cascada")
-        planta, area, equipo = cascada_activos("view")
+    planta, area, equipo, sistema = filtro_cascada_5_niveles("nav")
+    
+    if sistema:
+        st.divider()
+        st.markdown(f"### 📂 {sistema} (Perteneciente a {equipo})")
         
-        if equipo:
-            st.divider()
-            # Mostrar Equipo y sus Hijos (Componentes)
-            info_equipo = get_df('df_activos')[get_df('df_activos')['TAG'] == equipo]
-            hijos = get_df('df_activos')[get_df('df_activos')['TAG_Padre'] == equipo]
-            
-            st.info(f"Visualizando: **{equipo}**")
-            st.dataframe(pd.concat([info_equipo, hijos]), use_container_width=True)
+        # Buscar componentes hijos de este sistema
+        df = get_db()
+        componentes = df[df['TAG_Padre'] == sistema]
+        
+        if not componentes.empty:
+            st.markdown("#### 🔩 Componentes Instalados:")
+            st.dataframe(componentes[['TAG', 'Nombre', 'Especificaciones', 'Estado']], use_container_width=True)
             
 
-    # --- TAB: CREAR (TU REQUERIMIENTO PRINCIPAL) ---
-    with tab_crear:
-        st.subheader("Alta de Activos en Cascada")
-        st.markdown("Para agregar un componente (ej. Motor), selecciona primero a qué equipo pertenece.")
-        
-        # 1. Seleccionar Padre con Cascada
-        st.markdown("##### 1. Ubicación del Activo (Padre)")
-        p, a, e = cascada_activos("add")
-        
-        # Lógica: ¿Quién es el padre?
-        padre_sugerido = "ROOT"
-        nivel_sugerido = "L2-Planta"
-        
-        if e: 
-            padre_sugerido = e
-            nivel_sugerido = "L5-Componente"
-            st.success(f"El nuevo activo será hijo de: **{e}**")
-        elif a: 
-            padre_sugerido = a
-            nivel_sugerido = "L4-Equipo"
-            st.success(f"El nuevo activo será hijo de: **{a}**")
-        elif p: 
-            padre_sugerido = p
-            nivel_sugerido = "L3-Area"
-            st.success(f"El nuevo activo será hijo de: **{p}**")
+[Image of industrial gearbox diagram]
 
-        # 2. Formulario de Datos
-        st.markdown("##### 2. Datos del Nuevo Activo")
-        with st.form("new_asset_form"):
-            col_a, col_b = st.columns(2)
-            new_tag = col_a.text_input("TAG Nuevo", value=f"{padre_sugerido}-NUEVO")
-            new_name = col_b.text_input("Nombre Descriptivo")
-            new_level = col_a.selectbox("Nivel Jerárquico", ["L2-Planta", "L3-Area", "L4-Equipo", "L5-Componente"], index=["L2-Planta", "L3-Area", "L4-Equipo", "L5-Componente"].index(nivel_sugerido))
-            new_spec = st.text_area("Especificaciones Técnicas")
-            
-            if st.form_submit_button("💾 Guardar Activo"):
-                if new_tag in get_df('df_activos')['TAG'].values:
-                    st.error("¡Ese TAG ya existe!")
-                else:
-                    new_row = {"TAG": new_tag, "Nombre": new_name, "Nivel": new_level, "TAG_Padre": padre_sugerido, "Area": "Manual", "Especificaciones": new_spec}
-                    save_df('df_activos', pd.concat([get_df('df_activos'), pd.DataFrame([new_row])], ignore_index=True))
-                    st.success(f"Activo {new_tag} creado correctamente.")
-                    st.rerun()
+        else:
+            st.warning("Este sistema no tiene componentes registrados aún.")
 
-    # --- TAB: EDITAR ---
-    with tab_edit:
-        st.subheader("Edición Tipo Excel")
-        st.markdown("Edita directamente las celdas y presiona guardar.")
-        
-        df_editado = st.data_editor(get_df('df_activos'), num_rows="dynamic", use_container_width=True)
-        
-        if st.button("💾 Guardar Cambios Masivos (Activos)"):
-            save_df('df_activos', df_editado)
-            st.success("Base de datos actualizada.")
-
-# -----------------------------------------------------------------------------
-# MÓDULO 2: GESTIÓN DEL TRABAJO (OTs)
-# -----------------------------------------------------------------------------
-if menu == "2. Gestión del Trabajo (OTs)":
-    st.subheader("🛠️ Generación de Avisos y OTs")
+# --- TAB 2: AGREGAR NUEVO ACTIVO (CRUD) ---
+with tab_nuevo:
+    st.subheader("Alta de Nuevos Elementos")
+    st.markdown("Usa los filtros para definir **DÓNDE** se instalará el nuevo activo.")
     
-    col_form, col_data = st.columns([1, 2])
+    # Reutilizamos la cascada para elegir el PADRE
+    st.markdown("##### 1. Selecciona el Padre:")
+    p, a, e, s = filtro_cascada_5_niveles("add")
     
-    with col_form:
-        st.markdown("### Nueva OT")
-        # Filtro Cascada Mini
-        df = get_df('df_activos')
-        eqs = df[df['Nivel'].isin(['L4-Equipo', 'L5-Componente'])]['TAG'].unique()
-        
-        with st.form("ot_form"):
-            sel_eq_ot = st.selectbox("Equipo Afectado", eqs)
-            desc_ot = st.text_area("Descripción del Trabajo")
-            fecha_ot = st.date_input("Fecha Programada")
-            prioridad = st.selectbox("Prioridad", ["Alta", "Media", "Baja"])
-            
-            if st.form_submit_button("🚀 Crear OT"):
-                new_ot = {
-                    "ID_OT": len(get_df('df_ots')) + 5000,
-                    "ID_Aviso": "N/A",
-                    "TAG_Equipo": sel_eq_ot,
-                    "Trabajo": desc_ot,
-                    "Fecha_Prog": str(fecha_ot),
-                    "Estado": "Abierta"
-                }
-                save_df('df_ots', pd.concat([get_df('df_ots'), pd.DataFrame([new_ot])], ignore_index=True))
-                st.success("OT Creada")
-                
-    with col_data:
-        st.markdown("### Backlog de Mantenimiento")
-        # Edición directa de estados de OT
-        edited_ots = st.data_editor(get_df('df_ots'), key="ot_editor", use_container_width=True)
-        if len(edited_ots) != len(get_df('df_ots')): # Detectar si borraron filas
-             save_df('df_ots', edited_ots)
-
-# -----------------------------------------------------------------------------
-# MÓDULO 3: MONITOREO
-# -----------------------------------------------------------------------------
-if menu == "3. Monitoreo (Lecturas)":
-    st.subheader("📈 Registro de Lecturas de Campo")
+    # Lógica para determinar quién es el padre y qué nivel toca
+    padre_final = "ROOT"
+    nivel_sugerido = "L2-Planta"
     
-    # Cascada para seleccionar qué medir
-    planta, area, equipo = cascada_activos("mon")
+    if s:
+        padre_final = s
+        nivel_sugerido = "L6-Componente"
+        st.success(f"Vas a crear un COMPONENTE dentro del sistema: **{s}**")
+    elif e:
+        padre_final = e
+        nivel_sugerido = "L5-Sistema"
+        st.success(f"Vas a crear un SISTEMA dentro del equipo: **{e}**")
+    elif a:
+        padre_final = a
+        nivel_sugerido = "L4-Equipo"
+        st.success(f"Vas a crear un EQUIPO dentro del área: **{a}**")
+    elif p:
+        padre_final = p
+        nivel_sugerido = "L3-Area"
     
-    if equipo:
-        # Buscar componentes hijos del equipo seleccionado
-        hijos = get_df('df_activos')[get_df('df_activos')['TAG_Padre'] == equipo]['TAG'].tolist()
-        lista_medibles = [equipo] + hijos
-        
-        with st.form("lectura_form"):
-            col1, col2, col3 = st.columns(3)
-            tag_medido = col1.selectbox("Punto de Medida", lista_medibles)
-            variable = col2.selectbox("Variable", ["Temperatura (°C)", "Vibración (mm/s)", "Amperaje (A)", "Nivel (%)"])
-            valor = col3.number_input("Valor", step=0.1)
-            inspector = st.text_input("Inspector", value="Operador Turno")
-            
-            if st.form_submit_button("Grabar Lectura"):
-                new_lec = {
-                    "Fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "TAG_Equipo": tag_medido,
-                    "Variable": variable,
-                    "Valor": valor,
-                    "Inspector": inspector
-                }
-                save_df('df_lecturas', pd.concat([get_df('df_lecturas'), pd.DataFrame([new_lec])], ignore_index=True))
-                st.success("Lectura registrada.")
-    
-    st.divider()
-    st.subheader("Historial Reciente")
-    st.dataframe(get_df('df_lecturas').sort_values("Fecha", ascending=False).head(10), use_container_width=True)
-    
-    # Gráfico rápido
-    if not get_df('df_lecturas').empty:
-        df_l = get_df('df_lecturas')
-        fig = px.line(df_l, x="Fecha", y="Valor", color="TAG_Equipo", symbol="Variable", title="Tendencias")
-        st.plotly_chart(fig, use_container_width=True)
-
-# -----------------------------------------------------------------------------
-# MÓDULO 4: ALMACÉN
-# -----------------------------------------------------------------------------
-if menu == "4. Almacén & BOM":
-    tab_inv, tab_bom = st.tabs(["📦 Inventario Materiales", "🔗 Asignar Repuesto (BOM)"])
-    
-    with tab_inv:
-        st.markdown("### Maestro de Materiales")
-        # Tabla editable para inventario
-        df_mat_edit = st.data_editor(get_df('df_mat'), num_rows="dynamic", use_container_width=True)
-        save_df('df_mat', df_mat_edit)
-        
-    with tab_bom:
-        st.markdown("### Vincular Repuesto a Equipo")
-        
+    st.markdown("##### 2. Detalles del Activo:")
+    with st.form("frm_add"):
         c1, c2 = st.columns(2)
-        # Filtramos solo equipos y componentes para asignar BOM
-        assets = get_df('df_activos')[get_df('df_activos')['Nivel'].isin(['L4-Equipo', 'L5-Componente'])]['TAG'].unique()
-        mats = get_df('df_mat')['SKU'].unique()
+        nuevo_tag = c1.text_input("TAG Nuevo", value=f"{padre_final}-NUEVO")
+        nuevo_nom = c2.text_input("Nombre", placeholder="Ej: Faja B86, Bomba Hidráulica...")
+        nuevo_niv = c1.selectbox("Nivel", ["L3-Area", "L4-Equipo", "L5-Sistema", "L6-Componente"], index=["L3-Area", "L4-Equipo", "L5-Sistema", "L6-Componente"].index(nivel_sugerido) if nivel_sugerido != "L2-Planta" else 0)
+        nueva_esp = c2.text_area("Especificaciones Técnicas")
         
-        with st.form("bom_form"):
-            sel_asset = c1.selectbox("Equipo / Componente", assets)
-            sel_sku = c2.selectbox("Repuesto (SKU)", mats) if len(mats) > 0 else c2.warning("Crea materiales primero")
-            cant = st.number_input("Cantidad", min_value=1, value=1)
-            
-            if st.form_submit_button("Vincular"):
-                new_bom = {"TAG_Equipo": sel_asset, "SKU_Material": sel_sku, "Cantidad": cant}
-                save_df('df_bom', pd.concat([get_df('df_bom'), pd.DataFrame([new_bom])], ignore_index=True))
-                st.success(f"Vinculado: {sel_sku} -> {sel_asset}")
-        
-        st.dataframe(get_df('df_bom'), use_container_width=True)
+        if st.form_submit_button("💾 Guardar en Base de Datos"):
+            if nuevo_tag in get_db()['TAG'].values:
+                st.error("Error: El TAG ya existe.")
+            else:
+                nuevo_reg = {
+                    "TAG": nuevo_tag, "Nombre": nuevo_nom, "Nivel": nuevo_niv, 
+                    "TAG_Padre": padre_final, "Area": "Manual", 
+                    "Estado": "Operativo", "Especificaciones": nueva_esp
+                }
+                save_db(pd.concat([get_db(), pd.DataFrame([nuevo_reg])], ignore_index=True))
+                st.toast("✅ Activo creado correctamente!")
+                st.rerun()
 
-# Footer con instrucciones
+# --- TAB 3: EDICIÓN MANUAL (EXCEL) ---
+with tab_datos:
+    st.subheader("Gestión Masiva de Datos")
+    st.markdown("Aquí puedes editar nombres, especificaciones o corregir errores directamente.")
+    
+    df_editor = st.data_editor(get_db(), num_rows="dynamic", use_container_width=True, height=600)
+    
+    col_btn, col_info = st.columns([1, 4])
+    if col_btn.button("💾 Guardar Cambios"):
+        save_db(df_editor)
+        st.success("Base de datos actualizada.")
+
+# --- BARRA LATERAL: RESUMEN ---
+st.sidebar.header("Resumen de Planta")
+df_actual = get_db()
+cant_equipos = len(df_actual[df_actual['Nivel'] == 'L4-Equipo'])
+cant_sistemas = len(df_actual[df_actual['Nivel'] == 'L5-Sistema'])
+cant_comp = len(df_actual[df_actual['Nivel'] == 'L6-Componente'])
+
+st.sidebar.metric("Equipos (Digestores)", cant_equipos)
+st.sidebar.metric("Sistemas", cant_sistemas)
+st.sidebar.metric("Componentes", cant_comp)
 st.sidebar.markdown("---")
-st.sidebar.info("💡 **Nota:** Los datos se guardan en la memoria temporal. Si recargas la página (F5), volverán al estado inicial.")
+st.sidebar.info("Modo: **Gestión Manual en Memoria**")
