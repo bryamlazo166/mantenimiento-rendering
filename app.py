@@ -110,10 +110,6 @@ with tab_arbol:
         if not componentes.empty:
             st.markdown("#### 🔩 Componentes Instalados:")
             st.dataframe(componentes[['TAG', 'Nombre', 'Especificaciones', 'Estado']], use_container_width=True)
-            
-
-[Image of industrial gearbox diagram]
-
         else:
             st.warning("Este sistema no tiene componentes registrados aún.")
 
