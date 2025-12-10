@@ -5,7 +5,7 @@ import plotly.express as px
 from datetime import datetime
 
 # ==========================================
-# 1. CONFIGURACIÓN Y BASE DE DATOS (MEMORIA)
+# 1. CONFIGURACIÓN Y REPARACIÓN DE MEMORIA
 # ==========================================
 st.set_page_config(page_title="Sistema Integral Rendering", layout="wide", page_icon="🏭")
 
@@ -14,79 +14,59 @@ st.markdown("""
 <style>
     .main-header { font-size: 20px; font-weight: bold; color: #1e88e5; }
     .status-ok { background-color: #c8e6c9; padding: 5px; border-radius: 3px; }
-    .status-warn { background-color: #fff9c4; padding: 5px; border-radius: 3px; }
 </style>
 """, unsafe_allow_html=True)
 
-# Inicializamos Session State (Base de Datos Volátil)
-if 'df_activos' not in st.session_state:
-    # 1. TABLA ACTIVOS (Jerarquía)
-    st.session_state.df_activos = pd.DataFrame(columns=[
-        "TAG", "Nombre", "Nivel", "TAG_Padre", "Area", "Estado", "Especificaciones"
-    ])
-    
-    # 2. TABLA MANTENIMIENTO (OTs)
-    st.session_state.df_ots = pd.DataFrame(columns=[
-        "ID_OT", "TAG_Equipo", "Descripcion", "Tipo", "Fecha_Prog", "Estado"
-    ])
-    
-    # 3. TABLA MONITOREO (Lecturas)
-    st.session_state.df_lecturas = pd.DataFrame(columns=[
-        "Fecha", "TAG_Equipo", "Variable", "Valor", "Unidad", "Inspector"
-    ])
-    
-    # 4. TABLA ALMACÉN (Materiales y BOM)
-    st.session_state.df_materiales = pd.DataFrame(columns=[
-        "SKU", "Descripcion", "Marca", "Stock", "Ubicacion"
-    ])
-    st.session_state.df_bom = pd.DataFrame(columns=[
-        "TAG_Equipo", "SKU_Material", "Cantidad"
-    ])
+# --- INICIALIZACIÓN ROBUSTA (Evita KeyErrors) ---
+# Verificamos CADA tabla individualmente. Si falta una (por actualización de código), la crea.
 
-    # --- GENERADOR DE DATOS INICIALES (9 DIGESTORES COMPLETOS) ---
-    data_demo = []
+if 'df_activos' not in st.session_state:
+    st.session_state.df_activos = pd.DataFrame(columns=["TAG", "Nombre", "Nivel", "TAG_Padre", "Area", "Estado", "Especificaciones"])
     
-    # Niveles Superiores
+    # DATOS SEMILLA (SOLO SI ES LA PRIMERA VEZ)
+    data_demo = []
     data_demo.append({"TAG": "PL-REND", "Nombre": "Planta Rendering", "Nivel": "L2-Planta", "TAG_Padre": "ROOT", "Area": "General"})
     data_demo.append({"TAG": "AR-COCC", "Nombre": "Área de Cocción", "Nivel": "L3-Area", "TAG_Padre": "PL-REND", "Area": "Cocción"})
-    
-    # Bucle 9 Digestores
     for i in range(1, 10):
         dig_tag = f"EQ-DIG-{i:02d}"
-        
-        # L4 - EQUIPO
         data_demo.append({"TAG": dig_tag, "Nombre": f"Digestor #{i}", "Nivel": "L4-Equipo", "TAG_Padre": "AR-COCC", "Area": "Cocción", "Especificaciones": "5 Ton/h"})
-        
-        # --- L5 - SISTEMAS (NUEVO REQUERIMIENTO) ---
+        # Sistemas
         sis_mot = f"{dig_tag}-SIS-MOT"
         sis_trm = f"{dig_tag}-SIS-TRM"
-        
         data_demo.append({"TAG": sis_mot, "Nombre": "Sistema Motriz", "Nivel": "L5-Sistema", "TAG_Padre": dig_tag, "Area": "Cocción", "Especificaciones": "Eléctrico"})
         data_demo.append({"TAG": sis_trm, "Nombre": "Sistema Transmisión", "Nivel": "L5-Sistema", "TAG_Padre": dig_tag, "Area": "Cocción", "Especificaciones": "Mecánico"})
-        
-        # --- L6 - COMPONENTES ---
-        # Componentes del Sistema Motriz
+        # Componentes
         data_demo.append({"TAG": f"{dig_tag}-MTR", "Nombre": "Motor 75HP", "Nivel": "L6-Componente", "TAG_Padre": sis_mot, "Area": "Cocción", "Especificaciones": "440V"})
-        
-        # Componentes del Sistema Transmisión
         data_demo.append({"TAG": f"{dig_tag}-FAJ", "Nombre": "Juego Fajas B86", "Nivel": "L6-Componente", "TAG_Padre": sis_trm, "Area": "Cocción", "Especificaciones": "Perfil B"})
-        data_demo.append({"TAG": f"{dig_tag}-POL", "Nombre": "Polea 4 Canales", "Nivel": "L6-Componente", "TAG_Padre": sis_trm, "Area": "Cocción", "Especificaciones": "Hierro"})
-
-    st.session_state.df_activos = pd.DataFrame(data_demo)
     
-    # Materiales de Ejemplo
-    mats = [
+    st.session_state.df_activos = pd.DataFrame(data_demo)
+
+if 'df_ots' not in st.session_state:
+    st.session_state.df_ots = pd.DataFrame(columns=["ID_OT", "TAG_Equipo", "Descripcion", "Tipo", "Fecha_Prog", "Estado"])
+
+if 'df_lecturas' not in st.session_state:
+    st.session_state.df_lecturas = pd.DataFrame(columns=["Fecha", "TAG_Equipo", "Variable", "Valor", "Unidad", "Inspector"])
+
+if 'df_materiales' not in st.session_state: # Aquí fallaba antes
+    st.session_state.df_materiales = pd.DataFrame([
         {"SKU": "FAJ-B86", "Descripcion": "Faja en V B86", "Marca": "Gates", "Stock": 50, "Ubicacion": "A-1"},
         {"SKU": "ROD-22220", "Descripcion": "Rodamiento Esférico", "Marca": "SKF", "Stock": 4, "Ubicacion": "B-2"}
-    ]
-    st.session_state.df_materiales = pd.DataFrame(mats)
+    ])
 
-# Atajos de acceso a datos
-def get_df(key): return st.session_state[key]
-def save_df(key, val): st.session_state[key] = val
+if 'df_bom' not in st.session_state: # Aquí fallaba antes
+    st.session_state.df_bom = pd.DataFrame(columns=["TAG_Equipo", "SKU_Material", "Cantidad"])
+
+
+# Atajos de acceso seguro
+def get_df(key): 
+    if key not in st.session_state: return pd.DataFrame() # Prevención extra
+    return st.session_state[key]
+
+def save_df(key, val): 
+    st.session_state[key] = val
 
 # ==========================================
-# 2. FUNCIÓN MAESTRA: FILTRO EN CASCADA (5 NIVELES)
+# 2. FUNCIÓN MAESTRA: FILTRO EN CASCADA
 # ==========================================
 def filtro_cascada_universal(key_prefix):
     """Genera selectores dependientes y devuelve la selección más profunda"""
@@ -110,15 +90,14 @@ def filtro_cascada_universal(key_prefix):
     sistemas = df[df['TAG_Padre'] == sel_equipo]['TAG'].unique() if sel_equipo else []
     sel_sistema = c4.selectbox("🔄 Sistema", sistemas, key=f"{key_prefix}_s")
     
-    # 5. Componente (Opcional para ver detalle)
+    # 5. Componente
     componentes = df[df['TAG_Padre'] == sel_sistema]['TAG'].unique() if sel_sistema else []
     sel_comp = c5.selectbox("🔩 Componente", componentes, key=f"{key_prefix}_c")
     
-    # Devolver un diccionario con todo el contexto
     return {
         "planta": sel_planta, "area": sel_area, "equipo": sel_equipo, 
         "sistema": sel_sistema, "componente": sel_comp,
-        "ultimo_tag": sel_comp if sel_comp else (sel_sistema if sel_sistema else (sel_equipo if sel_equipo else sel_area))
+        "ultimo_tag": sel_comp if sel_comp else (sel_sistema if sel_sistema else (sel_equipo if sel_equipo else (sel_area if sel_area else sel_planta)))
     }
 
 # ==========================================
@@ -148,18 +127,21 @@ if menu == "1. Maestro de Activos (Jerarquía)":
         if ctx['ultimo_tag']:
             st.divider()
             tag = ctx['ultimo_tag']
-            info = get_df('df_activos')[get_df('df_activos')['TAG'] == tag].iloc[0]
+            # Filtro seguro para evitar errores si se borraron datos
+            info_rows = get_df('df_activos')[get_df('df_activos')['TAG'] == tag]
             
-            st.markdown(f"### 🏷️ {info['Nombre']} ({info['TAG']})")
-            st.info(f"**Especificaciones:** {info['Especificaciones']}")
-            
-            # Mostrar hijos directos
-            hijos = get_df('df_activos')[get_df('df_activos')['TAG_Padre'] == tag]
-            if not hijos.empty:
-                st.markdown(f"**Contenido de {info['Nivel']}:**")
-                st.dataframe(hijos[['TAG', 'Nombre', 'Nivel', 'Estado']], use_container_width=True)
-            else:
-                st.caption("Este es el nivel más bajo (Componente).")
+            if not info_rows.empty:
+                info = info_rows.iloc[0]
+                st.markdown(f"### 🏷️ {info['Nombre']} ({info['TAG']})")
+                st.info(f"**Especificaciones:** {info['Especificaciones']}")
+                
+                # Mostrar hijos directos
+                hijos = get_df('df_activos')[get_df('df_activos')['TAG_Padre'] == tag]
+                if not hijos.empty:
+                    st.markdown(f"**Contenido de {info['Nivel']}:**")
+                    st.dataframe(hijos[['TAG', 'Nombre', 'Nivel', 'Estado']], use_container_width=True)
+                else:
+                    st.caption("Este es el nivel más bajo (Componente).")
 
     # --- B. AGREGAR ACTIVO ---
     with tab_add:
@@ -169,11 +151,11 @@ if menu == "1. Maestro de Activos (Jerarquía)":
         ctx_add = filtro_cascada_universal("add")
         padre = ctx_add['ultimo_tag']
         
-        # Lógica automática de nivel sugerido
+        # Lógica automática de nivel sugerido (CORREGIDA PARA EVITAR VALUE ERROR)
         df = get_df('df_activos')
         nivel_padre = df[df['TAG'] == padre]['Nivel'].iloc[0] if padre else "ROOT"
         
-        sugerencia = "L2-Planta"
+        sugerencia = "L2-Planta" # Default seguro
         if nivel_padre == "L2-Planta": sugerencia = "L3-Area"
         elif nivel_padre == "L3-Area": sugerencia = "L4-Equipo"
         elif nivel_padre == "L4-Equipo": sugerencia = "L5-Sistema"
@@ -186,7 +168,17 @@ if menu == "1. Maestro de Activos (Jerarquía)":
             c1, c2 = st.columns(2)
             new_tag = c1.text_input("TAG Nuevo", value=f"{padre}-NUEVO" if padre else "")
             new_nom = c2.text_input("Nombre")
-            new_niv = c1.selectbox("Nivel", ["L3-Area", "L4-Equipo", "L5-Sistema", "L6-Componente"], index=["L3-Area", "L4-Equipo", "L5-Sistema", "L6-Componente"].index(sugerencia))
+            
+            # Lista de opciones completa
+            opciones_niv = ["L2-Planta", "L3-Area", "L4-Equipo", "L5-Sistema", "L6-Componente"]
+            
+            # Index seguro (Evita ValueError si la sugerencia no está en la lista)
+            try:
+                idx_sug = opciones_niv.index(sugerencia)
+            except ValueError:
+                idx_sug = 0
+                
+            new_niv = c1.selectbox("Nivel", opciones_niv, index=idx_sug)
             new_esp = c2.text_area("Especificaciones")
             
             if st.form_submit_button("💾 Guardar"):
@@ -297,6 +289,7 @@ if menu == "4. Almacén y BOM":
     
     with tab_mat:
         st.subheader("Inventario de Repuestos")
+        # USAMOS GET_DF PARA EVITAR KEYERROR
         df_mat_ed = st.data_editor(get_df('df_materiales'), num_rows="dynamic", use_container_width=True)
         if st.button("Guardar Inventario"):
             save_df('df_materiales', df_mat_ed)
@@ -311,13 +304,17 @@ if menu == "4. Almacén y BOM":
         
         with st.form("frm_bom"):
             sel_tag = c1.selectbox("Activo (Componente)", activos)
-            sel_sku = c2.selectbox("Repuesto (SKU)", mats) if len(mats) > 0 else c2.warning("Crea materiales primero")
+            # Validación por si no hay materiales creados
+            sel_sku = c2.selectbox("Repuesto (SKU)", mats) if len(mats) > 0 else None
             cant = c3.number_input("Cantidad", min_value=1)
             
             if st.form_submit_button("Vincular BOM"):
-                new_bom = {"TAG_Equipo": sel_tag, "SKU_Material": sel_sku, "Cantidad": cant}
-                save_df('df_bom', pd.concat([get_df('df_bom'), pd.DataFrame([new_bom])], ignore_index=True))
-                st.success("BOM Actualizada")
+                if sel_sku:
+                    new_bom = {"TAG_Equipo": sel_tag, "SKU_Material": sel_sku, "Cantidad": cant}
+                    save_df('df_bom', pd.concat([get_df('df_bom'), pd.DataFrame([new_bom])], ignore_index=True))
+                    st.success("BOM Actualizada")
+                else:
+                    st.error("Crea materiales primero en la otra pestaña.")
         
         st.markdown("#### Lista de Materiales Actual")
         st.dataframe(get_df('df_bom'), use_container_width=True)
