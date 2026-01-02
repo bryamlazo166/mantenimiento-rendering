@@ -9,11 +9,10 @@ class ClaseEquipo(Base):
     __tablename__ = "clases_equipo"
     
     id = Column(Integer, primary_key=True, index=True)
-    nombre = Column(String(100), unique=True, nullable=False)  # Motor eléctrico
-    familia = Column(String(50))  # Rotativo, Estático, Eléctrico, Instrumentación
+    nombre = Column(String(100), unique=True, nullable=False)
+    familia = Column(String(50))
     descripcion = Column(Text, nullable=True)
     
-    # Relaciones
     atributos = relationship("AtributoClase", back_populates="clase")
     equipos = relationship("Equipo", back_populates="clase_equipo")
 
@@ -24,12 +23,11 @@ class AtributoClase(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     clase_id = Column(Integer, ForeignKey("clases_equipo.id"), nullable=False)
-    nombre_atributo = Column(String(100), nullable=False)  # HP, Tensión, Diámetro
-    tipo_dato = Column(String(20), default="texto")  # texto, numero, lista
-    unidad = Column(String(20), nullable=True)  # V, HP, mm, RPM
+    nombre_atributo = Column(String(100), nullable=False)
+    tipo_dato = Column(String(20), default="texto")
+    unidad = Column(String(20), nullable=True)
     obligatorio = Column(Boolean, default=False)
     
-    # Relaciones
     clase = relationship("ClaseEquipo", back_populates="atributos")
     valores = relationship("ValorAtributoEquipo", back_populates="atributo")
 
@@ -44,23 +42,20 @@ class Equipo(Base):
     area = Column(String(100), index=True, nullable=False)
     linea = Column(String(100), index=True, nullable=False)
     equipo = Column(String(100), index=True, nullable=False)
-    sistema = Column(String(100), index=True, nullable=False)  # tu "Sistema" = Sub-equipo
+    sistema = Column(String(100), index=True, nullable=False)
     componente = Column(String(100), index=True, nullable=False)
     
     # Datos generales
     codigo_interno = Column(String(50), unique=True, index=True, nullable=False)
     descripcion = Column(Text)
     ubicacion = Column(String(200))
-    criticidad = Column(String(20))  # Alta, Media, Baja
-    estado = Column(String(50))  # Operativo, Parado, En mantenimiento
+    criticidad = Column(String(20))
+    estado = Column(String(50))
     fecha_alta = Column(Date, nullable=True)
     
-    # Vínculo a clase de equipo (para atributos técnicos)
     clase_equipo_id = Column(Integer, ForeignKey("clases_equipo.id"), nullable=True)
-    
     activo = Column(Boolean, default=True)
     
-    # Relaciones
     clase_equipo = relationship("ClaseEquipo", back_populates="equipos")
     atributos_valores = relationship("ValorAtributoEquipo", back_populates="equipo", cascade="all, delete-orphan")
     avisos = relationship("Aviso", back_populates="equipo")
@@ -77,7 +72,6 @@ class ValorAtributoEquipo(Base):
     valor_texto = Column(String(200), nullable=True)
     valor_numero = Column(Float, nullable=True)
     
-    # Relaciones
     equipo = relationship("Equipo", back_populates="atributos_valores")
     atributo = relationship("AtributoClase", back_populates="valores")
 
@@ -92,17 +86,16 @@ class Aviso(Base):
     equipo_id = Column(Integer, ForeignKey("equipos.id"), nullable=False)
     
     descripcion_aviso = Column(Text, nullable=False)
-    criticidad_aviso = Column(String(20))  # Alta, Media, Baja
+    criticidad_aviso = Column(String(20))
     prioridad = Column(String(20))
     
     fecha_solicitud = Column(Date, nullable=False)
     fecha_tratamiento = Column(Date, nullable=True)
     fecha_programacion = Column(Date, nullable=True)
     
-    estado_aviso = Column(String(50), default="Pendiente")  # Pendiente, En proceso, Cerrado
+    estado_aviso = Column(String(50), default="Pendiente")
     solicitante = Column(String(100), nullable=True)
     
-    # Relaciones
     equipo = relationship("Equipo", back_populates="avisos")
     ordenes = relationship("OrdenTrabajo", back_populates="aviso")
 
@@ -115,41 +108,34 @@ class OrdenTrabajo(Base):
     aviso_id = Column(Integer, ForeignKey("avisos.id"), nullable=False)
     
     numero_ot = Column(String(50), unique=True, index=True, nullable=False)
-    tipo_mantenimiento = Column(String(50))  # Correctivo, Preventivo, Predictivo
+    tipo_mantenimiento = Column(String(50))
     actividad = Column(Text)
     
-    # Asignación
     tecnico = Column(String(100))
     turno = Column(String(20))
     especialidad = Column(String(50))
     proveedor = Column(String(100), nullable=True)
     
-    # Fechas
     fecha_inicio_programada = Column(Date, nullable=True)
     fecha_termino_programada = Column(Date, nullable=True)
     fecha_termino_real = Column(Date, nullable=True)
     
-    # Planificación HH
     plan_hh_parcial = Column(Float, nullable=True)
     plan_hh_total = Column(Float, nullable=True)
     cant_tecnicos_plan = Column(Integer, nullable=True)
     
-    # Real HH
     real_hh_parcial = Column(Float, nullable=True)
     real_hh_total = Column(Float, nullable=True)
     cant_tecnicos_real = Column(Integer, nullable=True)
     
-    # Materiales
-    check_materiales = Column(String(20), nullable=True)  # OK, Pendiente
+    check_materiales = Column(String(20), nullable=True)
     numero_rq = Column(String(50), nullable=True)
     fecha_real_rq = Column(Date, nullable=True)
     fecha_estimada_rq = Column(Date, nullable=True)
     
-    # Control
     porcentaje_avance = Column(Float, default=0.0)
-    estado_ot = Column(String(50), default="Abierta")  # Abierta, En ejecución, Cerrada
+    estado_ot = Column(String(50), default="Abierta")
     observaciones = Column(Text, nullable=True)
-    antiguedad = Column(Integer, nullable=True)  # días desde solicitud o inicio
+    antiguedad = Column(Integer, nullable=True)
     
-    # Relaciones
     aviso = relationship("Aviso", back_populates="ordenes")
