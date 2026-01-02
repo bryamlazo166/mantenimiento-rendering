@@ -1,43 +1,65 @@
-from fastapi import FastAPI, Depends, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
-from sqlalchemy.orm import Session
 
-from . import models, schemas, crud
-from .database import engine, Base
-from .deps import get_db
 
-Base.metadata.create_all(bind=engine)
+# ============ CLASES DE EQUIPO ============
 
-app = FastAPI(title="Gestión de Mantenimiento - Beta", version="0.1.0")
+@app.post("/clases/", response_model=schemas.ClaseEquipoOut)
+def crear_clase_equipo(data: schemas.ClaseEquipoCreate, db: Session = Depends(get_db)):
+    return crud.create_clase_equipo(db, data)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+@app.get("/clases/", response_model=list[schemas.ClaseEquipoOut])
+def listar_clases_equipo(db: Session = Depends(get_db)):
+    return crud.get_clases_equipo(db)
 
-# Servir archivos estáticos
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
-@app.get("/")
-def root():
-    return RedirectResponse(url="/static/index.html")
+# ============ ATRIBUTOS DE CLASE ============
 
-@app.post("/equipos/", response_model=schemas.EquipoOut)
-def crear_equipo(data: schemas.EquipoCreate, db: Session = Depends(get_db)):
-    return crud.create_equipo(db, data)
+@app.post("/atributos/", response_model=schemas.AtributoClaseOut)
+def crear_atributo_clase(data: schemas.AtributoClaseCreate, db: Session = Depends(get_db)):
+    return crud.create_atributo_clase(db, data)
 
-@app.get("/equipos/", response_model=list[schemas.EquipoOut])
-def listar_equipos(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
-    return crud.get_equipos(db, skip=skip, limit=limit)
+@app.get("/atributos/{clase_id}", response_model=list[schemas.AtributoClaseOut])
+def listar_atributos_clase(clase_id: int, db: Session = Depends(get_db)):
+    return crud.get_atributos_by_clase(db, clase_id)
 
-@app.get("/equipos/{equipo_id}", response_model=schemas.EquipoOut)
-def obtener_equipo(equipo_id: int, db: Session = Depends(get_db)):
-    equipo = crud.get_equipo_by_id(db, equipo_id)
-    if not equipo:
-        raise HTTPException(status_code=404, detail="Equipo no encontrado")
-    return equipo
+
+# ============ AVISOS ============
+
+@app.post("/avisos/", response_model=schemas.AvisoOut)
+def crear_aviso(data: schemas.AvisoCreate, db: Session = Depends(get_db)):
+    return crud.create_aviso(db, data)
+
+@app.get("/avisos/", response_model=list[schemas.AvisoOut])
+def listar_avisos(equipo_id: int = None, db: Session = Depends(get_db)):
+    return crud.get_avisos(db, equipo_id=equipo_id)
+
+@app.get("/avisos/{aviso_id}", response_model=schemas.AvisoOut)
+def obtener_aviso(aviso_id: int, db: Session = Depends(get_db)):
+    aviso = crud.get_aviso_by_id(db, aviso_id)
+    if not aviso:
+        raise HTTPException(status_code=404, detail="Aviso no encontrado")
+    return aviso
+
+
+# ============ ÓRDENES DE TRABAJO ============
+
+@app.post("/ordenes/", response_model=schemas.OrdenTrabajoOut)
+def crear_orden_trabajo(data: schemas.OrdenTrabajoCreate, db: Session = Depends(get_db)):
+    return crud.create_orden_trabajo(db, data)
+
+@app.get("/ordenes/", response_model=list[schemas.OrdenTrabajoOut])
+def listar_ordenes_trabajo(aviso_id: int = None, db: Session = Depends(get_db)):
+    return crud.get_ordenes_trabajo(db, aviso_id=aviso_id)
+
+@app.get("/ordenes/{orden_id}", response_model=schemas.OrdenTrabajoOut)
+def obtener_orden_trabajo(orden_id: int, db: Session = Depends(get_db)):
+    orden = crud.get_orden_by_id(db, orden_id)
+    if not orden:
+        raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
+    return orden
+
+@app.put("/ordenes/{orden_id}", response_model=schemas.OrdenTrabajoOut)
+def actualizar_orden_trabajo(orden_id: int, data: schemas.OrdenTrabajoUpdate, db: Session = Depends(get_db)):
+    orden = crud.get_orden_by_id(db, orden_id)
+    if not orden:
+        raise HTTPException(status_code=404, detail="Orden de trabajo no encontrada")
+    return crud.update_orden_trabajo(db, orden, data)
