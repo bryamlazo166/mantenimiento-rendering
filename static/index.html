@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Mantenimiento - Planta</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔧 Sistema de Gestión de Activos</h1>
+            <p class="subtitle">Planta Rendering - Mantenimiento</p>
+        </header>
+
+        <!-- FORMULARIO DE REGISTRO -->
+        <section class="card">
+            <h2>📝 Registro / Edición de Equipo</h2>
+            
+            <form id="equipoForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="area">Área *</label>
+                        <select id="area" required>
+                            <option value="">Seleccione...</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="linea">Línea *</label>
+                        <select id="linea" required disabled>
+                            <option value="">Seleccione área primero</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="equipo">Equipo *</label>
+                        <select id="equipo" required disabled>
+                            <option value="">Seleccione línea primero</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="sistema">Sistema (Sub-equipo) *</label>
+                        <select id="sistema" required disabled>
+                            <option value="">Seleccione equipo primero</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="componente">Componente *</label>
+                        <select id="componente" required disabled>
+                            <option value="">Seleccione sistema primero</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="codigo">Código Interno *</label>
+                        <input type="text" id="codigo" placeholder="Ej: MTR-001" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group full-width">
+                        <label for="descripcion">Descripción</label>
+                        <textarea id="descripcion" rows="2" placeholder="Descripción del equipo"></textarea>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="ubicacion">Ubicación</label>
+                        <input type="text" id="ubicacion" placeholder="Ubicación física">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="criticidad">Criticidad</label>
+                        <select id="criticidad">
+                            <option value="Alta">Alta</option>
+                            <option value="Media" selected>Media</option>
+                            <option value="Baja">Baja</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="estado">Estado</label>
+                        <select id="estado">
+                            <option value="Operativo" selected>Operativo</option>
+                            <option value="Parado">Parado</option>
+                            <option value="En mantenimiento">En mantenimiento</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="fechaAlta">Fecha de Alta</label>
+                        <input type="date" id="fechaAlta">
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button type="submit" class="btn btn-primary">💾 Guardar Nuevo</button>
+                    <button type="button" id="btnActualizar" class="btn btn-warning" disabled>✏️ Actualizar</button>
+                    <button type="button" id="btnLimpiar" class="btn btn-secondary">🔄 Limpiar</button>
+                </div>
+            </form>
+
+            <div id="mensaje" class="mensaje"></div>
+        </section>
+
+        <!-- BÚSQUEDA Y RESULTADOS -->
+        <section class="card">
+            <h2>🔍 Búsqueda de Equipos</h2>
+            
+            <div class="search-bar">
+                <input type="text" id="searchText" placeholder="Buscar por código, descripción o ubicación...">
+                <button id="btnBuscar" class="btn btn-primary">🔍 Buscar</button>
+                <button id="btnVerTodos" class="btn btn-secondary">📋 Ver Todos</button>
+            </div>
+
+            <div class="stats">
+                <span id="totalEquipos">Total: 0 equipos</span>
+                <span id="equiposCriticos">Críticos: 0</span>
+            </div>
+
+            <div class="table-container">
+                <table id="equiposTable">
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Área</th>
+                            <th>Línea</th>
+                            <th>Equipo</th>
+                            <th>Sistema</th>
+                            <th>Componente</th>
+                            <th>Descripción</th>
+                            <th>Criticidad</th>
+                            <th>Estado</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="10" class="no-data">No hay equipos registrados. Use el formulario para crear uno.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
